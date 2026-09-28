@@ -1,0 +1,7 @@
+import { env } from 'cloudflare:workers';
+import { Campaign, demoCampaign } from './campaign';
+export function db(){ if(!env.DB) throw new Error('Base de datos no disponible'); return env.DB; }
+export async function ensureDemo(){ const seeded=await db().prepare('SELECT value FROM app_meta WHERE key=?').bind('demo_seeded').first(); if(seeded)return; const exists=await db().prepare('SELECT id FROM campaigns LIMIT 1').first(); if(!exists){const d=demoCampaign(); await db().prepare('INSERT OR IGNORE INTO campaigns (id,name,config,created_at,updated_at) VALUES (?,?,?,?,?)').bind(d.id,d.name,JSON.stringify(d),d.createdAt,d.updatedAt).run();} await db().prepare('INSERT OR IGNORE INTO app_meta (key,value) VALUES (?,?)').bind('demo_seeded','1').run();}
+export async function getCampaign(id:string):Promise<Campaign|null>{const row=await db().prepare('SELECT config FROM campaigns WHERE id=?').bind(id).first<{config:string}>();return row?JSON.parse(row.config):null;}
+export async function putCampaign(c:Campaign){await db().prepare('INSERT INTO campaigns (id,name,config,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, config=excluded.config, updated_at=excluded.updated_at').bind(c.id,c.name,JSON.stringify(c),c.createdAt,c.updatedAt).run();}
+export function err(e:unknown){console.error(e);return Response.json({error:'No se pudo completar la operación. Intentá de nuevo.'},{status:500});}
